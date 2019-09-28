@@ -21,6 +21,10 @@ Application will yield as output:
 ## Search pattern
 * OpenCV feature descriptors and its matching. In details searching [planar objects](https://docs.opencv.org/trunk/dd/dd4/tutorial_detection_of_planar_objects.html)
 
+## Camera Calibration and 3D Projection
+* What means camera [calibration in opencv](https://docs.opencv.org/3.3.0/dc/dbb/tutorial_py_calibration.html)
+* [One way](https://docs.opencv.org/3.3.0/d7/d53/tutorial_py_pose.html) to use camera matrix and camera distortions
+
 ## Calculation homography
 * I want to know displacement vector of pattern corner. This sounds like [this](https://docs.opencv.org/trunk/d9/dab/tutorial_homography.html) 
 * In final, I should compute real world coordinates of pattern. This is explained [here](https://www.fdxlabs.com/calculate-x-y-z-real-world-coordinates-from-a-single-camera-using-opencv/)

@@ -1,3 +1,12 @@
+# Task
+Application will receive as input:
+* pattern - binary colored image (black-white)
+* image in which app search pattern
+* camera calibration settings relevant to the picture
+
+Application will yield as output:
+* patterns shift and rotation in camera coordinate system.
+
 # Setup opencv
 * use this [cv doc about opencv building](https://docs.opencv.org/trunk/d7/d9f/tutorial_linux_install.html) and [this](https://docs.opencv.org/trunk/db/df5/tutorial_linux_gcc_cmake.html) about using cv and cmake together
 

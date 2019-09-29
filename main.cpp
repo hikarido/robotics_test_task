@@ -1,8 +1,12 @@
-#include <opencv2/opencv.hpp>
-#include <opencv2/core/utils/logger.hpp>
 #include <map>
 #include <string>
 #include <vector>
+#include <limits>
+
+#include <opencv2/opencv.hpp>
+#include <opencv2/features2d.hpp>
+#include <opencv2/xfeatures2d.hpp>
+#include <opencv2/calib3d.hpp>
 
 #include "easylogging++.h"
 INITIALIZE_EASYLOGGINGPP
@@ -67,9 +71,13 @@ cv::Mat read_svg_marker(std::string & marker_path){
         exit(1);
     }
 
-    // +1 because patterns size is image.w and image.h, we want to store real size of pattern
+    int padding = 10;
+    // +padding because patterns size is image.w and image.h, we want to store real size of pattern
     // threfore container size for it must be greater a little bit
-    cv::Mat mat_from_svg(image->height + 1, image->width + 1, CV_8UC1, cv::Scalar(255, 255, 255));
+    cv::Mat mat_from_svg(image->height + padding, image->width + padding, CV_8UC1, cv::Scalar(255, 255, 255));
+
+    // on this value we shift marker in his Mat storage
+    int shift = 4;
 
     std::vector<std::vector<cv::Point>> segments;
 
@@ -81,8 +89,8 @@ cv::Mat read_svg_marker(std::string & marker_path){
             for (int i = 0; i < path->npts-1; i += 3, drop =! drop) {
                 if(drop) continue; // remove points dublicates
                 float* p = &path->pts[i*2];
-                cv::Point start_line((int)p[0], (int)p[1]);
-                cv::Point end_line((int)p[6], (int)p[7]);
+                cv::Point start_line((int)p[0] + shift, (int)p[1] + shift);
+                cv::Point end_line((int)p[6] + shift, (int)p[7] + shift);
                 segment.push_back(start_line);
                 segment.push_back(end_line);
 
@@ -106,7 +114,7 @@ cv::Mat read_svg_marker(std::string & marker_path){
 }
 
 
-void display_image(const std::string && win_name, const cv::Mat & image, int w, int h){
+void display_image(const std::string && win_name, const cv::Mat & image, int w=800, int h=600){
     cv::namedWindow(win_name, cv::WINDOW_NORMAL);
     cv::resizeWindow(win_name, w, h);
     cv::imshow(win_name, image);
@@ -143,6 +151,88 @@ std::map<std::string, cv::Mat> read_camera_intrinsics(const std::string & camera
     return settings;
 }
 
+///
+/// \brief extract_contours
+/// extract contours either work image or marker image
+/// from marker we wan to retrieve only one contour - inner contour
+/// from image all contours
+/// moreover out marker not requires binarisation by default
+/// \param image
+/// \param make_bin_thresh
+/// \param extract_only_inner
+/// \return
+///
+std::vector<std::vector<cv::Point>>
+extract_contours(
+    const cv::Mat & image,
+    bool make_bin_thresh=false,
+    bool extract_only_inner=false
+){
+    cv::Mat tmp_image = image.clone();
+    if(make_bin_thresh){
+        cv::cvtColor(tmp_image, tmp_image, cv::COLOR_BGR2GRAY);
+        cv::threshold(tmp_image, tmp_image, 127, 255, cv::THRESH_BINARY);
+    }
+
+    // search enges and contour on marker
+    cv::Mat edges;
+    cv::Canny(tmp_image, edges, 127, 255, 3);
+//    display_image("edges", edges);
+
+    std::vector<std::vector<cv::Point>> contours;
+
+    cv::RetrievalModes extract_mode;
+    if(extract_only_inner){
+        extract_mode = cv::RETR_CCOMP;
+    }
+    else
+        extract_mode = cv::RETR_LIST;
+
+    cv::findContours(tmp_image, contours, extract_mode, cv::CHAIN_APPROX_SIMPLE);
+    for(auto & s: contours){
+        cv::approxPolyDP(s, s, 10, true);
+    }
+
+    if(extract_only_inner){
+        std::vector<std::vector<cv::Point>> internal_contours;
+        internal_contours.push_back(contours.back());
+        return internal_contours;
+    }
+
+    return contours;
+}
+
+
+int search_best_contours_match(
+    const std::vector<std::vector<cv::Point>> & image_contours,
+    const std::vector<cv::Point> & marker_contour
+){
+    int best_index = -1;
+    double match_score_max = 1000;//std::numeric_limits<double>::max();
+    double match_score_cur = 0;
+
+    cv::Mat image = cv::Mat::zeros(5000, 5000, CV_8SC3);
+
+    for(int i = 0; i < image_contours.size(); i++){
+        if(cv::contourArea(image_contours[i]) < 1000) continue;
+        if(!cv::isContourConvex(image_contours[i])) continue;
+        if(image_contours[i].size() != 5) continue;
+
+
+//        cv::drawContours(image, image_contours, i, cv::Scalar(255, 0, 255), 3);
+//        LOG(DEBUG) << cv::contourArea(image_contours[i]) << " i: " << i << "con: " << cv::isContourConvex(image_contours[i]);
+//        LOG(DEBUG) << image_contours[i];
+//        display_image("contour", image);
+
+        if(match_score_cur < match_score_max){
+            match_score_max = match_score_cur;
+            best_index = i;
+        }
+    }
+
+    return best_index;
+}
+
 
 int main(int argc, char** argv )
 {
@@ -155,14 +245,65 @@ int main(int argc, char** argv )
     auto work_paths = get_input_paths(argc, argv, cmd_keys);
 
     auto work_image = read_image(work_paths["image"]);
-    display_image("work img", work_image, 800, 600);
+//    display_image("work img", work_image, 800, 600);
 
     auto work_marker = read_svg_marker(work_paths["marker"]);
-    display_image("marker", work_marker, 100, 150);
+//    display_image("marker", work_marker, 100, 150);
 
     auto camera_settings = read_camera_intrinsics(work_paths["camera"]);
-    LOG(INFO) << "camera matrix: " << camera_settings["matrix"] << ", distortion: " << camera_settings["distortion"];
+//    LOG(INFO) << "camera matrix: " << camera_settings["matrix"] << ", distortion: " << camera_settings["distortion"];
+
+    cv::blur(work_image, work_image, cv::Size(10, 10));
+
+    auto marker_contours = extract_contours(work_marker, false, true);
+    auto image_contours = extract_contours(work_image, true, false);
+
+    int best_contour_match_index = search_best_contours_match(image_contours, marker_contours[0]);
+    if(best_contour_match_index == -1){
+        LOG(ERROR) << "Can't find contour matching in image";
+        exit(0);
+    }
+
+    cv::drawContours(work_image, image_contours, best_contour_match_index, cv::Scalar(255, 0, 255), 3);
+    display_image("best contour", work_image);
+    LOG(DEBUG) << image_contours[best_contour_match_index];
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
     return 0;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

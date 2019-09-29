@@ -189,8 +189,11 @@ extract_contours(
         extract_mode = cv::RETR_LIST;
 
     cv::findContours(tmp_image, contours, extract_mode, cv::CHAIN_APPROX_SIMPLE);
+
+    // I want leave only strainght forward lines. Drop big part of contour
+    int approximation_power = 10;
     for(auto & s: contours){
-        cv::approxPolyDP(s, s, 10, true);
+        cv::approxPolyDP(s, s, approximation_power, true);
     }
 
     if(extract_only_inner){
@@ -202,7 +205,19 @@ extract_contours(
     return contours;
 }
 
-
+/**
+ * @brief search_best_contours_match
+ * our marker is five corner convex house...
+ * at further position it has area near 10000
+ * It is plased on white A4 paper.
+ * Houses walls parallel to longest papers side
+ * House have blask filing color on whole area
+ * this function search contour which have best match with condition above
+ * @param image_contours
+ * @param marker_contour
+ * @return index of best corner in image_corners
+ * - image_corners[ret_val] is best contour
+ */
 int search_best_contours_match(
     const std::vector<std::vector<cv::Point>> & image_contours,
     const std::vector<cv::Point> & marker_contour
@@ -210,19 +225,15 @@ int search_best_contours_match(
     int best_index = -1;
     double match_score_max = 1000;//std::numeric_limits<double>::max();
     double match_score_cur = 0;
-
-    cv::Mat image = cv::Mat::zeros(5000, 5000, CV_8SC3);
+    int min_area_of_contour = 5000; // In test images further object has area 10 000
+    int exactly_marker_points_count = 5; // our marker has 5 corners
 
     for(int i = 0; i < image_contours.size(); i++){
-        if(cv::contourArea(image_contours[i]) < 1000) continue;
+        if(cv::contourArea(image_contours[i]) < min_area_of_contour) continue;
         if(!cv::isContourConvex(image_contours[i])) continue;
-        if(image_contours[i].size() != 5) continue;
+        if(image_contours[i].size() != exactly_marker_points_count) continue;
 
-
-//        cv::drawContours(image, image_contours, i, cv::Scalar(255, 0, 255), 3);
-//        LOG(DEBUG) << cv::contourArea(image_contours[i]) << " i: " << i << "con: " << cv::isContourConvex(image_contours[i]);
-//        LOG(DEBUG) << image_contours[i];
-//        display_image("contour", image);
+        match_score_cur = cv::matchShapes(image_contours[i], marker_contour, cv::CONTOURS_MATCH_I1, 0);
 
         if(match_score_cur < match_score_max){
             match_score_max = match_score_cur;
@@ -253,18 +264,17 @@ int main(int argc, char** argv )
     auto camera_settings = read_camera_intrinsics(work_paths["camera"]);
 //    LOG(INFO) << "camera matrix: " << camera_settings["matrix"] << ", distortion: " << camera_settings["distortion"];
 
-    cv::blur(work_image, work_image, cv::Size(10, 10));
-
     auto marker_contours = extract_contours(work_marker, false, true);
     auto image_contours = extract_contours(work_image, true, false);
 
+    LOG(DEBUG) << cv::isContourConvex(marker_contours[0]);
     int best_contour_match_index = search_best_contours_match(image_contours, marker_contours[0]);
     if(best_contour_match_index == -1){
         LOG(ERROR) << "Can't find contour matching in image";
         exit(0);
     }
 
-    cv::drawContours(work_image, image_contours, best_contour_match_index, cv::Scalar(255, 0, 255), 3);
+    cv::drawContours(work_image, image_contours, best_contour_match_index, cv::Scalar(0, 127, 255), 5);
     display_image("best contour", work_image);
     LOG(DEBUG) << image_contours[best_contour_match_index];
 

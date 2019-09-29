@@ -16,6 +16,8 @@ Application will yield as output:
 * opencv = 4.1.2
 * qtcreator
 * Linux Mint 19.1 Tessa
+* [nanosvg](https://github.com/memononen/nanosvg)
+* [easyloggingpp](https://github.com/zuhd-org/easyloggingpp)
 
 # Studing
 ## Search pattern

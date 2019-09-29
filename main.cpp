@@ -98,7 +98,7 @@ cv::Mat read_svg_marker(std::string & marker_path){
     nsvgDelete(image);
 
     // draw pattern on mat
-    for(auto s: segments){
+    for(auto & s: segments){
         cv::fillConvexPoly(mat_from_svg, s.data(), s.size(), cv::Scalar(0, 0, 0));
     }
 
@@ -115,9 +115,37 @@ void display_image(const std::string && win_name, const cv::Mat & image, int w, 
 }
 
 
+std::map<std::string, cv::Mat> read_camera_intrinsics(const std::string & camera_file){
+    cv::FileStorage storage;
+    if(!storage.open(camera_file, cv::FileStorage::READ)){
+        LOG(ERROR) << "Can't open json file with camera calibration settings";
+        exit(1);
+    }
+
+    std::map<std::string, cv::Mat> settings;
+    settings["matrix"] = cv::Mat(3, 3, CV_64F, cv::Scalar(-1.0));
+    settings["distortion"] = cv::Mat(8, 1, CV_64F, cv::Scalar(-1.0));
+
+    auto intrisics = storage["intrinsics"];
+
+    //read K - camera matrix
+    for(int i = 0, K_inex = 0; i < settings["matrix"].cols; i++){
+        for(int j = 0; j < settings["matrix"].rows; j++, K_inex++){
+            settings["matrix"].at<double>(i, j) = intrisics["K"][K_inex];
+        }
+    }
+
+    //read distrtion vector
+    for(int i = 0; i < settings["distortion"].rows; i++){
+        settings["distortion"].at<double>(i, 0) = intrisics["distortion"][i];
+    }
+
+    return settings;
+}
+
+
 int main(int argc, char** argv )
 {
-//    cv::utils::logging::setLogLevel(cv::utils::logging::LOG_LEVEL_DEBUG);
     const cv::String cmd_keys =
             "{help  h	|| calculate rotaton and translation of marker on image	}"
             "{image i 	|| path to image which contains pattern					}"
@@ -131,6 +159,9 @@ int main(int argc, char** argv )
 
     auto work_marker = read_svg_marker(work_paths["marker"]);
     display_image("marker", work_marker, 100, 150);
+
+    auto camera_settings = read_camera_intrinsics(work_paths["camera"]);
+    LOG(INFO) << "camera matrix: " << camera_settings["matrix"] << ", distortion: " << camera_settings["distortion"];
 
 
     return 0;

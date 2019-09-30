@@ -5,7 +5,7 @@
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/features2d.hpp>
-#include <opencv2/xfeatures2d.hpp>
+//#include <opencv2/xfeatures2d.hpp>
 #include <opencv2/calib3d.hpp>
 
 #include "easylogging++.h"
@@ -61,6 +61,7 @@ cv::Mat read_image(std::string & image_path){
    LOG(ERROR) << "can\'t load image file - " << image_path;
    exit(-1);
 }
+
 
 cv::Mat read_svg_marker(std::string & marker_path){
     struct NSVGimage* image;
@@ -151,6 +152,7 @@ std::map<std::string, cv::Mat> read_camera_intrinsics(const std::string & camera
     return settings;
 }
 
+
 ///
 /// \brief extract_contours
 /// extract contours either work image or marker image
@@ -206,6 +208,56 @@ extract_contours(
 }
 
 /**
+ * @brief calculate_adjacent_segments_indexes
+ * for counter clock wise oriented contour
+ * generate indexes of adjacent segments
+ * @param contour_size
+ * @return
+ */
+std::vector<std::vector<int>>
+calculate_adjacent_segments_indexes(int contour_size){
+
+    int two_pair_size = 4;
+    std::vector<std::vector<int>> adjacent;
+    for(int i = 0; i < contour_size - 2; i++){
+        std::vector<int> adj;
+        adj.reserve(two_pair_size);
+        adj.push_back(i);
+        adj.push_back(i + 1);
+        adj.push_back(i + 1);
+        adj.push_back(i + 2);
+
+        adjacent.push_back(adj);
+    }
+
+    //close indexes chain
+    std::vector<int> last_adj;
+    last_adj.reserve(two_pair_size);
+    last_adj.push_back(adjacent.back()[2]);
+    last_adj.push_back(adjacent.back()[3]);
+    last_adj.push_back(adjacent.back()[3]);
+    last_adj.push_back(0); // because all contours is closed
+    adjacent.push_back(last_adj);
+
+
+    return adjacent;
+}
+
+
+bool has_two_parallel_line(const std::vector<cv::Point> & contour, double delta=0.1){
+    bool answer = false;
+    auto indexes = calculate_adjacent_segments_indexes(contour.size());
+    for(std::vector<int> & index: indexes){
+        for(auto i: index){
+            std::cout << i << std::endl;
+        }
+    }
+
+    return answer;
+}
+
+
+/**
  * @brief search_best_contours_match
  * our marker is five corner convex house...
  * at further position it has area near 10000
@@ -232,6 +284,7 @@ int search_best_contours_match(
         if(cv::contourArea(image_contours[i]) < min_area_of_contour) continue;
         if(!cv::isContourConvex(image_contours[i])) continue;
         if(image_contours[i].size() != exactly_marker_points_count) continue;
+        if(!has_two_parallel_line(image_contours[i])) continue;
 
         match_score_cur = cv::matchShapes(image_contours[i], marker_contour, cv::CONTOURS_MATCH_I1, 0);
 

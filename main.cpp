@@ -5,7 +5,6 @@
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/features2d.hpp>
-//#include <opencv2/xfeatures2d.hpp>
 #include <opencv2/calib3d.hpp>
 
 #include "easylogging++.h"
@@ -244,16 +243,89 @@ calculate_adjacent_segments_indexes(int contour_size){
 }
 
 
-bool has_two_parallel_line(const std::vector<cv::Point> & contour, double delta=0.1){
-    bool answer = false;
-    auto indexes = calculate_adjacent_segments_indexes(contour.size());
-    for(std::vector<int> & index: indexes){
-        for(auto i: index){
-            std::cout << i << std::endl;
+std::map<std::pair<int, int>, std::vector<std::pair<int, int>>>
+calculate_all_non_adjance_combination_segments_indexes(int contour_size){
+    std::map<std::pair<int, int>, std::vector<std::pair<int, int>>> res;
+
+    // create all combinations of segments
+    std::vector<std::pair<int, int>> all_segments;
+    all_segments.reserve(contour_size);
+    for(int i = 0; i + 1 < contour_size; i++){
+        all_segments.push_back(std::pair<int, int>(i, i+1));
+    }
+    std::pair<int, int> last_pair = all_segments.back();
+    all_segments.push_back(std::pair<int, int>(last_pair.second, 0));
+
+    // match each segments to all not adjacent segments
+    for(int i = 0; i < all_segments.size(); i++){
+        res[all_segments[i]] = std::vector<std::pair<int, int>>();
+        for(int j = 0; j < all_segments.size(); j++){
+            bool self_cond = i == j;
+            bool right_cond = (i + 1) == j;
+            bool left_cond = (i - 1) == j;
+            bool left_border_cond = ((i - 1) < 0) && ((j + 1) == all_segments.size());
+            bool right_border_cond = ((i + 1) == all_segments.size()) && (j == 0);
+
+            if(self_cond || right_cond || left_cond || left_border_cond || right_border_cond) continue;
+
+            res[all_segments[i]].push_back(all_segments[j]);
         }
     }
 
-    return answer;
+//    for(const auto & p: res){
+//        auto key = p.first;
+//        auto val = p.second;
+//        std::cout << " pair " << std::get<0>(key) << " " << std::get<1>(key) << "\n";
+//        for(auto i: val){
+//                std::cout << " " << std::get<0>(i) << " " << std::get<1>(i) << "\n";
+//            }
+//    }
+    return res;
+}
+
+
+/**
+ * @brief cos_between_vectors
+ * vectors must be normalized
+ * caller must perform substraction vectors toe from heel
+ * @param a
+ * @param b
+ * @return
+ */
+double cos_between_vectors(const cv::Point & a, const cv::Point & b){
+    double ans = 0;
+    ans = double(a.dot(b)) / (cv::norm(a) * cv::norm(b));
+    return ans;
+}
+
+
+/**
+ * @brief has_two_parallel_line
+ * search two parallel segment in all not adjacent segments of contour
+ * using fact about cos between two parallel vectors is 1.0
+ * @param contour
+ * @param delta deviation interval from cos == 1.0
+ * @return
+ */
+bool has_two_parallel_line(const std::vector<cv::Point> & contour, double delta=0.1){
+    auto indexes = calculate_all_non_adjance_combination_segments_indexes(contour.size());
+
+    for(const auto & anhor_not_adjacent: indexes){
+        auto anchor = anhor_not_adjacent.first;
+        for(const auto & not_adjacent: anhor_not_adjacent.second){
+            cv::Point a = contour[anchor.first] - contour[anchor.second];
+            cv::Point b = contour[not_adjacent.first] - contour[not_adjacent.second];
+            double cos_ab = cos_between_vectors(a, b);
+            cos_ab = cv::abs(cos_ab);
+            bool cos_is_in_confidence_interval = cos_ab < (1 + delta) && cos_ab > (1 - delta);
+            LOG(DEBUG) << cos_ab;
+            if(cos_is_in_confidence_interval){
+                return true;
+            }
+        }
+    }
+
+    return false;
 }
 
 
@@ -264,6 +336,7 @@ bool has_two_parallel_line(const std::vector<cv::Point> & contour, double delta=
  * It is plased on white A4 paper.
  * Houses walls parallel to longest papers side
  * House have blask filing color on whole area
+ * House have 2 parallel lines - left and right walls
  * this function search contour which have best match with condition above
  * @param image_contours
  * @param marker_contour
@@ -286,12 +359,8 @@ int search_best_contours_match(
         if(image_contours[i].size() != exactly_marker_points_count) continue;
         if(!has_two_parallel_line(image_contours[i])) continue;
 
-        match_score_cur = cv::matchShapes(image_contours[i], marker_contour, cv::CONTOURS_MATCH_I1, 0);
-
-        if(match_score_cur < match_score_max){
-            match_score_max = match_score_cur;
-            best_index = i;
-        }
+        best_index = i;
+        break;
     }
 
     return best_index;

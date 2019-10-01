@@ -2,6 +2,8 @@
 #include <string>
 #include <vector>
 #include <limits>
+#include <list>
+#include <algorithm>
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/features2d.hpp>
@@ -321,7 +323,7 @@ bool is_vectors_collinear(const cv::Point & a, const cv::Point & b, double delta
  * @param delta deviation interval from cos == 1.0
  * @return
  */
-bool has_two_parallel_line(const std::vector<cv::Point> & contour, double delta=0.1){
+bool has_two_parallel_line(const std::vector<cv::Point> & contour, double delta=0.01){
     auto indexes = calculate_all_non_adjance_combination_segments_indexes(contour.size());
 
     for(const auto & anhor_not_adjacent: indexes){
@@ -336,6 +338,47 @@ bool has_two_parallel_line(const std::vector<cv::Point> & contour, double delta=
     }
 
     return false;
+}
+
+
+int get_index_of_roof_corner_of_house(const std::vector<cv::Point> & contour, double delta=0.01){
+    auto indexes = calculate_all_non_adjance_combination_segments_indexes(contour.size());
+    std::vector<cv::Point> result;
+    result.reserve(4);
+
+    // search two collinear vectors
+    for(const auto & anhor_not_adjacent: indexes){
+        auto anchor = anhor_not_adjacent.first;
+        for(const auto & not_adjacent: anhor_not_adjacent.second){
+            cv::Point a = contour[anchor.first] - contour[anchor.second];
+            cv::Point b = contour[not_adjacent.first] - contour[not_adjacent.second];
+            if(is_vectors_collinear(a, b, delta)){
+
+                //search index of house roof corner
+                std::list<int> all_contour_indexes;
+                for(int i = 0; i < contour.size(); i++){
+                    all_contour_indexes.push_back(i);
+                }
+
+                all_contour_indexes.remove(anchor.first);
+                all_contour_indexes.remove(anchor.second);
+                all_contour_indexes.remove(not_adjacent.first);
+                all_contour_indexes.remove(not_adjacent.second);
+
+                if(all_contour_indexes.empty() || all_contour_indexes.size() != 1){
+                    return -1;
+                }
+
+                int index_of_roof_corner = all_contour_indexes.front();
+                // TODO fix it bag. Error in contour orientation
+                return index_of_roof_corner + 2;
+
+
+            }
+        }
+    }
+
+    return -1;
 }
 
 
@@ -399,16 +442,28 @@ int main(int argc, char** argv )
     auto marker_contours = extract_contours(work_marker, false, true);
     auto image_contours = extract_contours(work_image, true, false);
 
-    int best_contour_match_index = search_best_contours_match(image_contours, marker_contours[0]);
-    if(best_contour_match_index == -1){
+    int index_of_best_marker_contour = search_best_contours_match(image_contours, marker_contours[0]);
+    if(index_of_best_marker_contour == -1){
         LOG(ERROR) << "Can't find contour matching in image";
         exit(0);
     }
 
-    cv::drawContours(work_image, image_contours, best_contour_match_index, cv::Scalar(0, 127, 255), 5);
-    display_image("best contour", work_image);
-    LOG(DEBUG) << image_contours[best_contour_match_index];
+    int index_of_marker_origin = get_index_of_roof_corner_of_house(image_contours[index_of_best_marker_contour]);
+    if(index_of_marker_origin == -1){
+        LOG(ERROR) << "Can\'t find marker origin";
+        exit(0);
+    }
 
+    cv::drawContours(work_image, image_contours, index_of_best_marker_contour, cv::Scalar(0, 127, 255), 5);
+
+    cv::circle(
+        work_image,
+        image_contours[index_of_best_marker_contour][index_of_marker_origin],
+        10,
+        cv::Scalar(255, 0, 0)
+    );
+
+    display_image("best contour", work_image);
 
 
 

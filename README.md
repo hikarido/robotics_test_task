@@ -36,3 +36,5 @@ Application will yield as output:
 * Habr ["Пара слов о распозвовании образов"](https://habr.com/en/post/208090/)
 * Good edx cource about [Linear Algebra](https://www.edx.org/course/linear-algebra-foundations-to-frontiers-2)
 
+## Books
+[M.Laslo Calculation Geometry in C++](http://lib.agu.site/books/114/88/)

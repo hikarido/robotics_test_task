@@ -341,7 +341,37 @@ bool has_two_parallel_line(const std::vector<cv::Point> & contour, double delta=
 }
 
 
-int get_index_of_roof_corner_of_house(const std::vector<cv::Point> & contour, double delta=0.01){
+
+/**
+ * @brief triangle_orientation
+ * if p2 lies at left side of p1 - p0 : positive
+ * if p2 lies at rigth side of p1 - p0 : negative
+ * @param p0
+ * @param p1
+ * @param p2
+ * @return
+ * 1 if positive
+ * -1 if negative
+ * 0 if p1 - p0 and p2 - p0 are collinear
+ */
+int triangle_orientation(const cv::Point & p0, const cv::Point & p1, const cv::Point & p2){
+    cv::Point a = p1 - p0;
+    cv::Point b = p2 - p0;
+    int res = a.x*b.y - b.x*a.y;
+    if(res > 0){
+        return 1;
+    }
+
+    if(res < 0){
+        return -1;
+    }
+
+    return 0;
+
+}
+
+
+int get_index_of_left_bottom_corner_of_house(const std::vector<cv::Point> & contour, double delta=0.01){
     auto indexes = calculate_all_non_adjance_combination_segments_indexes(contour.size());
     std::vector<cv::Point> result;
     result.reserve(4);
@@ -370,10 +400,29 @@ int get_index_of_roof_corner_of_house(const std::vector<cv::Point> & contour, do
                 }
 
                 int index_of_roof_corner = all_contour_indexes.front();
-                // TODO fix it bag. Error in contour orientation
-                return index_of_roof_corner + 2;
 
+                int index_prev_roof = index_of_roof_corner - 1;
+                if(index_prev_roof < 0) index_prev_roof = contour.size() - 1;
 
+                int index_next_roof = index_of_roof_corner + 1;
+                if(index_next_roof == contour.size()) index_next_roof = 0;
+
+                cv::Point roof_point = contour[index_of_roof_corner];
+                cv::Point roof_prev = contour[index_prev_roof];
+                cv::Point roof_next = contour[index_next_roof];
+
+                int orientation = triangle_orientation(roof_point, roof_prev, roof_next);
+                int origin_index = -1;
+                if(orientation == 1){
+                    origin_index = index_next_roof + 1;
+                    if(origin_index > contour.size()) origin_index = 0;
+                }
+                else if(orientation == -1){
+                    origin_index = index_prev_roof - 1;
+                    if(origin_index < 0) origin_index = contour.size() - 1;
+                }
+
+                return origin_index;
             }
         }
     }
@@ -448,7 +497,7 @@ int main(int argc, char** argv )
         exit(0);
     }
 
-    int index_of_marker_origin = get_index_of_roof_corner_of_house(image_contours[index_of_best_marker_contour]);
+    int index_of_marker_origin = get_index_of_left_bottom_corner_of_house(image_contours[index_of_best_marker_contour]);
     if(index_of_marker_origin == -1){
         LOG(ERROR) << "Can\'t find marker origin";
         exit(0);
@@ -460,7 +509,8 @@ int main(int argc, char** argv )
         work_image,
         image_contours[index_of_best_marker_contour][index_of_marker_origin],
         10,
-        cv::Scalar(255, 0, 0)
+        cv::Scalar(255, 0, 255),
+        5
     );
 
     display_image("best contour", work_image);

@@ -370,8 +370,61 @@ int triangle_orientation(const cv::Point & p0, const cv::Point & p1, const cv::P
 
 }
 
+/**
+ * @brief get_contour_info
+ *
+ * get full contour info about contour - house marker type
+ *
+ * details:
+ * ========
+ *
+ * house marker
+ *          - *-
+ *         -  (.)roof
+ *        -        -
+ *       -          -
+ *      -            -
+ *     -              -
+ *    *                *
+ * (.)roof_prev      (.) roof_next
+ *    -                -
+ *    -                -
+ *    -                -
+ *    * - - - - - -  - *
+ * (.)origin          (.)origin_next
+ *
+ * our marker is house
+ * Coordinate system of house have origin at point of left bottom corner
+ * we find roof corner
+ * determine orientation of roof_corner, roof_next, roof_prev
+ * this orientation of contour orientation
+ * get to second left point from corner of roof house
+ * this is our coordinate origin
+ * @param contour
+ * @param delta
+ * @return map with data
+ * ["roof"] - index of roof corner in contour
+ * ["origin"] - index of bottom left corner of house
+ * ["orientation"] - contour orientation by roof and it adjacent points
+ * 	result of @triangle_orientation()
+ * ["roof_prev"] - index before roof according orientation
+ * ["roof_next"] - index after roof according to orientation
+ * ["origin_next"] - index after origin according to orientation
+ *
+ * 	if one of info members == -1 or orientation == -2
+ *  this means get_contour_info() exited without calculation
+ *  of data and its return value must be ignored or logged as error
+ */
+std::map<std::string, int>
+get_contour_info(const std::vector<cv::Point> & contour, double delta=0.01){
+    std::map<std::string, int> contour_data;
+    contour_data["roof"] = -1;
+    contour_data["origin"] = -1;
+    contour_data["orientation"] = -2;
+    contour_data["roof_next"] = -1;
+    contour_data["roof_prev"] = -1;
+    contour_data["origin_next"] = -1;
 
-int get_index_of_left_bottom_corner_of_house(const std::vector<cv::Point> & contour, double delta=0.01){
     auto indexes = calculate_all_non_adjance_combination_segments_indexes(contour.size());
     std::vector<cv::Point> result;
     result.reserve(4);
@@ -396,11 +449,12 @@ int get_index_of_left_bottom_corner_of_house(const std::vector<cv::Point> & cont
                 all_contour_indexes.remove(not_adjacent.second);
 
                 if(all_contour_indexes.empty() || all_contour_indexes.size() != 1){
-                    return -1;
+                    return contour_data;
                 }
 
                 int index_of_roof_corner = all_contour_indexes.front();
 
+                // search roof - 1 and roof + 1
                 int index_prev_roof = index_of_roof_corner - 1;
                 if(index_prev_roof < 0) index_prev_roof = contour.size() - 1;
 
@@ -412,22 +466,46 @@ int get_index_of_left_bottom_corner_of_house(const std::vector<cv::Point> & cont
                 cv::Point roof_next = contour[index_next_roof];
 
                 int orientation = triangle_orientation(roof_point, roof_prev, roof_next);
+
+                // search origin of marker and origim + 1
                 int origin_index = -1;
+                int origin_next_index = -1;
                 if(orientation == 1){
                     origin_index = index_next_roof + 1;
-                    if(origin_index > contour.size()) origin_index = 0;
+                    if(origin_index == contour.size()){
+                        origin_index = 0;
+                    }
+
+                    origin_next_index = origin_index + 1;
+                    if(origin_index == contour.size()){
+                        origin_next_index = 0;
+                    }
                 }
                 else if(orientation == -1){
                     origin_index = index_prev_roof - 1;
-                    if(origin_index < 0) origin_index = contour.size() - 1;
+                    if(origin_index < 0){
+                        origin_index = contour.size() - 1;
+                    }
+
+                    origin_next_index = origin_index - 1;
+                    if(origin_next_index < 0){
+                        origin_next_index = contour.size() - 1;
+                    }
                 }
 
-                return origin_index;
+                contour_data["roof"] = index_of_roof_corner;
+                contour_data["origin"] = origin_index;
+                contour_data["orientation"] = orientation;
+                contour_data["roof_next"] = index_next_roof;
+                contour_data["roof_prev"] = index_prev_roof;
+                contour_data["origin_next"] = origin_next_index;
+
+                return contour_data;
             }
         }
     }
 
-    return -1;
+    return contour_data;
 }
 
 
@@ -469,6 +547,64 @@ int search_best_contours_match(
 }
 
 
+std::map<std::string, cv::Mat> get_rotation_and_translation_of_house_marker(
+    std::map<std::string, int> info,
+    std::vector<cv::Point> contour,
+    std::map<std::string, cv::Mat> settings
+){
+
+
+    cv::Point3f Oo(0,0,0);
+    cv::Point3f Ox(100, 100, 0);
+    cv::Point3f Oy(100, 100, 0);
+    cv::Point3f Roof(50, 150, 0);
+
+    std::vector<cv::Point2f> points_2d;
+    std::vector<cv::Point3f> points_3d;
+
+    points_2d.push_back(contour[info["origin"]]);
+    points_2d.push_back(contour[info["origin_next"]]);
+    points_2d.push_back(contour[info["roof_next"]]);
+    points_2d.push_back(contour[info["roof"]]);
+
+    int orientation = info["orientation"];
+    if(orientation == 1){
+        points_3d.push_back(Oo);
+        points_3d.push_back(Ox);
+        points_3d.push_back(Oy);
+        points_3d.push_back(Roof);
+    }
+    else if(orientation = -1){
+        points_3d.push_back(Oo);
+        points_3d.push_back(Oy);
+        points_3d.push_back(Ox);
+        points_3d.push_back(Roof);
+    }
+    else{
+        LOG(ERROR) << "Orientation of left bottom house marker corner is bad";
+    }
+
+    cv::Mat rvec;
+    cv::Mat tvec;
+
+    cv::solvePnP(
+        points_3d,
+        points_2d,
+        settings["matrix"],
+        settings["distortion"],
+        rvec,
+        tvec
+    );
+
+    std::map<std::string, cv::Mat> result;
+    result["translation"] = tvec;
+    result["rotation"] = rvec;
+
+    return result;
+
+}
+
+
 int main(int argc, char** argv )
 {
     const cv::String cmd_keys =
@@ -497,7 +633,8 @@ int main(int argc, char** argv )
         exit(0);
     }
 
-    int index_of_marker_origin = get_index_of_left_bottom_corner_of_house(image_contours[index_of_best_marker_contour]);
+    auto contour_info = get_contour_info(image_contours[index_of_best_marker_contour]);
+    int index_of_marker_origin = contour_info["origin"];
     if(index_of_marker_origin == -1){
         LOG(ERROR) << "Can\'t find marker origin";
         exit(0);
@@ -509,12 +646,28 @@ int main(int argc, char** argv )
         work_image,
         image_contours[index_of_best_marker_contour][index_of_marker_origin],
         10,
-        cv::Scalar(255, 0, 255),
+        cv::Scalar(0, 0, 0),
+        5
+    );
+
+    cv::circle(
+        work_image,
+        image_contours[index_of_best_marker_contour][contour_info["roof_prev"]],
+        10,
+        cv::Scalar(255, 255, 0),
         5
     );
 
     display_image("best contour", work_image);
+    auto marker_transformation = get_rotation_and_translation_of_house_marker(
+        contour_info,
+        image_contours[index_of_best_marker_contour],
+        camera_settings
+    );
 
+
+    LOG(INFO) << "ROTATION MATRIX: \n" << marker_transformation["rotation"];
+    LOG(INFO) << "TRANSLATION MATRIX: \n" << marker_transformation["translation"];
 
 
 

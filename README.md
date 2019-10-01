@@ -7,6 +7,29 @@ Application will receive as input:
 Application will yield as output:
 * patterns shift and rotation in camera coordinate system.
 
+# Usage
+```
+$./tra_test_task --camera=tra_cv_test_assigment/camera.json --marker=tra_cv_test_assigment/object.svg --image=tra_cv_test_assigment/1.png 
+```
+## Output
+```
+2019-10-01 20:09:25,077 INFO [default] image is: tra_cv_test_assigment/1.png
+2019-10-01 20:09:25,077 INFO [default] camera is: tra_cv_test_assigment/camera.json
+2019-10-01 20:09:25,077 INFO [default] marker is: tra_cv_test_assigment/object.svg
+2019-10-01 20:09:25,744 INFO [default] ROTATION MATRIX: 
+[2.164463482569678;
+ -0.8642195386775817;
+ 0.387907598269059]
+2019-10-01 20:09:25,744 INFO [default] TRANSLATION MATRIX: 
+[-442.9830558655922;
+ -158.7325953973769;
+ 1880.306135295403]
+```
+
+and image
+
+![result](res.png)
+
 # Setup opencv
 * use this [cv doc about opencv building](https://docs.opencv.org/trunk/d7/d9f/tutorial_linux_install.html) and [this](https://docs.opencv.org/trunk/db/df5/tutorial_linux_gcc_cmake.html) about using cv and cmake together
 

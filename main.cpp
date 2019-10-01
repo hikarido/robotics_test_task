@@ -555,8 +555,8 @@ std::map<std::string, cv::Mat> get_rotation_and_translation_of_house_marker(
 
 
     cv::Point3f Oo(0,0,0);
-    cv::Point3f Ox(100, 100, 0);
-    cv::Point3f Oy(100, 100, 0);
+    cv::Point3f Ox(100, 0, 0);
+    cv::Point3f Oy(0, 100, 0);
     cv::Point3f Roof(50, 150, 0);
 
     std::vector<cv::Point2f> points_2d;
@@ -564,25 +564,13 @@ std::map<std::string, cv::Mat> get_rotation_and_translation_of_house_marker(
 
     points_2d.push_back(contour[info["origin"]]);
     points_2d.push_back(contour[info["origin_next"]]);
-    points_2d.push_back(contour[info["roof_next"]]);
+    points_2d.push_back(contour[info["roof_prev"]]);
     points_2d.push_back(contour[info["roof"]]);
 
-    int orientation = info["orientation"];
-    if(orientation == 1){
-        points_3d.push_back(Oo);
-        points_3d.push_back(Ox);
-        points_3d.push_back(Oy);
-        points_3d.push_back(Roof);
-    }
-    else if(orientation = -1){
-        points_3d.push_back(Oo);
-        points_3d.push_back(Oy);
-        points_3d.push_back(Ox);
-        points_3d.push_back(Roof);
-    }
-    else{
-        LOG(ERROR) << "Orientation of left bottom house marker corner is bad";
-    }
+    points_3d.push_back(Oo);
+    points_3d.push_back(Ox);
+    points_3d.push_back(Oy);
+    points_3d.push_back(Roof);
 
     cv::Mat rvec;
     cv::Mat tvec;
@@ -604,9 +592,43 @@ std::map<std::string, cv::Mat> get_rotation_and_translation_of_house_marker(
 
 }
 
+
 void draw_point_and_label(cv::Mat &image, const cv::Point & point, const std::string & label, const cv::Scalar & color){
     cv::circle( image, point, 10, color, 5);
     cv::putText(image, label, point, cv::FONT_HERSHEY_SIMPLEX, 3, color, 4);
+}
+
+
+void draw_axis_projection(
+    cv::Mat & image,
+    std::map<std::string, cv::Mat> & transformation,
+    std::map<std::string, cv::Mat> & settings
+){
+    cv::Mat axis;
+    // X
+    axis.push_back(cv::Point3f(0, 0, 0));
+    axis.push_back(cv::Point3f(100, 0, 0));
+
+    // Y
+    axis.push_back(cv::Point3f(0, 0, 0));
+    axis.push_back(cv::Point3f(0, 100, 0));
+
+    // Z
+    axis.push_back(cv::Point3f(0, 0, 0));
+    axis.push_back(cv::Point3f(0, 0, 100));
+
+    cv::Mat tvec = transformation["translation"];
+    cv::Mat rvec = transformation["rotation"];
+    cv::Mat result;
+    cv::projectPoints(axis, rvec, tvec, settings["matrix"], settings["distortion"], result);
+
+//    LOG(DEBUG) << result.row(0);
+    std::vector<cv::Point> result_vec = result;
+//    LOG(DEBUG) << a[0];
+    cv::line(image, result_vec[0], result_vec[1], cv::Scalar(255, 0, 0), 3);
+    cv::line(image, result_vec[2], result_vec[3], cv::Scalar(0, 255, 0), 3);
+    cv::line(image, result_vec[4], result_vec[5], cv::Scalar(0, 0, 255), 3);
+
 }
 
 
@@ -619,16 +641,9 @@ int main(int argc, char** argv )
             "{marker m 	|| path to image which is marker						}";
 
     auto work_paths = get_input_paths(argc, argv, cmd_keys);
-
     auto work_image = read_image(work_paths["image"]);
-//    display_image("work img", work_image, 800, 600);
-
     auto work_marker = read_svg_marker(work_paths["marker"]);
-//    display_image("marker", work_marker, 100, 150);
-
     auto camera_settings = read_camera_intrinsics(work_paths["camera"]);
-//    LOG(INFO) << "camera matrix: " << camera_settings["matrix"] << ", distortion: " << camera_settings["distortion"];
-
     auto marker_contours = extract_contours(work_marker, false, true);
     auto image_contours = extract_contours(work_image, true, false);
 
@@ -651,19 +666,19 @@ int main(int argc, char** argv )
         camera_settings
     );
 
-
     LOG(INFO) << "ROTATION MATRIX: \n" << marker_transformation["rotation"];
     LOG(INFO) << "TRANSLATION MATRIX: \n" << marker_transformation["translation"];
 
     cv::drawContours(work_image, image_contours, index_of_best_marker_contour, cv::Scalar(0, 127, 255), 5);
-
     auto best_contour = image_contours[index_of_best_marker_contour];
     draw_point_and_label(work_image, best_contour[contour_info["origin"]], "O", cv::Scalar(0, 0, 0));
-    draw_point_and_label(work_image, best_contour[contour_info["roof"]], "R", cv::Scalar(255, 0, 0));
+    draw_point_and_label(work_image, best_contour[contour_info["roof"]], "R", cv::Scalar(127, 0, 0));
     draw_point_and_label(work_image, best_contour[contour_info["roof_next"]], "Rn", cv::Scalar(255, 255, 0));
     draw_point_and_label(work_image, best_contour[contour_info["roof_prev"]], "Y", cv::Scalar(0, 255, 0));
-    draw_point_and_label(work_image, best_contour[contour_info["origin_next"]], "X", cv::Scalar(0, 0, 255));
+    draw_point_and_label(work_image, best_contour[contour_info["origin_next"]], "X", cv::Scalar(255, 0, 0));
+    draw_axis_projection(work_image, marker_transformation, camera_settings);
     display_image("best contour", work_image);
+
 
 
 

@@ -95,10 +95,6 @@ cv::Mat read_svg_marker(std::string & marker_path){
                 cv::Point end_line((int)p[6] + shift, (int)p[7] + shift);
                 segment.push_back(start_line);
                 segment.push_back(end_line);
-
-                LOG(DEBUG) << segment[0] << " " << segment[1];
-                LOG(DEBUG) << p[0] << " " << p[1] << " " << p[6] << " " << p[7];
-                LOG(DEBUG) << p[0] << " " << p[1] << " " << p[2] << " "<< p[3] << " " << p[4] << " " << p[5] << " " << p[6] << " " << p[7];
             }
 
         }
@@ -622,9 +618,7 @@ void draw_axis_projection(
     cv::Mat result;
     cv::projectPoints(axis, rvec, tvec, settings["matrix"], settings["distortion"], result);
 
-//    LOG(DEBUG) << result.row(0);
     std::vector<cv::Point> result_vec = result;
-//    LOG(DEBUG) << a[0];
     cv::line(image, result_vec[0], result_vec[1], cv::Scalar(255, 0, 0), 3);
     cv::line(image, result_vec[2], result_vec[3], cv::Scalar(0, 255, 0), 3);
     cv::line(image, result_vec[4], result_vec[5], cv::Scalar(0, 0, 255), 3);

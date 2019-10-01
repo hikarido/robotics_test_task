@@ -604,6 +604,11 @@ std::map<std::string, cv::Mat> get_rotation_and_translation_of_house_marker(
 
 }
 
+void draw_point_and_label(cv::Mat &image, const cv::Point & point, const std::string & label, const cv::Scalar & color){
+    cv::circle( image, point, 10, color, 5);
+    cv::putText(image, label, point, cv::FONT_HERSHEY_SIMPLEX, 3, color, 4);
+}
+
 
 int main(int argc, char** argv )
 {
@@ -640,25 +645,6 @@ int main(int argc, char** argv )
         exit(0);
     }
 
-    cv::drawContours(work_image, image_contours, index_of_best_marker_contour, cv::Scalar(0, 127, 255), 5);
-
-    cv::circle(
-        work_image,
-        image_contours[index_of_best_marker_contour][index_of_marker_origin],
-        10,
-        cv::Scalar(0, 0, 0),
-        5
-    );
-
-    cv::circle(
-        work_image,
-        image_contours[index_of_best_marker_contour][contour_info["roof_prev"]],
-        10,
-        cv::Scalar(255, 255, 0),
-        5
-    );
-
-    display_image("best contour", work_image);
     auto marker_transformation = get_rotation_and_translation_of_house_marker(
         contour_info,
         image_contours[index_of_best_marker_contour],
@@ -669,6 +655,15 @@ int main(int argc, char** argv )
     LOG(INFO) << "ROTATION MATRIX: \n" << marker_transformation["rotation"];
     LOG(INFO) << "TRANSLATION MATRIX: \n" << marker_transformation["translation"];
 
+    cv::drawContours(work_image, image_contours, index_of_best_marker_contour, cv::Scalar(0, 127, 255), 5);
+
+    auto best_contour = image_contours[index_of_best_marker_contour];
+    draw_point_and_label(work_image, best_contour[contour_info["origin"]], "O", cv::Scalar(0, 0, 0));
+    draw_point_and_label(work_image, best_contour[contour_info["roof"]], "R", cv::Scalar(255, 0, 0));
+    draw_point_and_label(work_image, best_contour[contour_info["roof_next"]], "Rn", cv::Scalar(255, 255, 0));
+    draw_point_and_label(work_image, best_contour[contour_info["roof_prev"]], "Y", cv::Scalar(0, 255, 0));
+    draw_point_and_label(work_image, best_contour[contour_info["origin_next"]], "X", cv::Scalar(0, 0, 255));
+    display_image("best contour", work_image);
 
 
 

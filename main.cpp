@@ -206,6 +206,7 @@ extract_contours(
     return contours;
 }
 
+
 /**
  * @brief calculate_adjacent_segments_indexes
  * for counter clock wise oriented contour
@@ -299,6 +300,19 @@ double cos_between_vectors(const cv::Point & a, const cv::Point & b){
 }
 
 
+bool is_vectors_collinear(const cv::Point & a, const cv::Point & b, double delta=0.1){
+    double cos_ab = cos_between_vectors(a, b);
+    cos_ab = cv::abs(cos_ab);
+    bool cos_is_in_confidence_interval = cos_ab < (1 + delta) && cos_ab > (1 - delta);
+    if(cos_is_in_confidence_interval){
+        return true;
+    }
+
+    return false;
+
+}
+
+
 /**
  * @brief has_two_parallel_line
  * search two parallel segment in all not adjacent segments of contour
@@ -315,11 +329,7 @@ bool has_two_parallel_line(const std::vector<cv::Point> & contour, double delta=
         for(const auto & not_adjacent: anhor_not_adjacent.second){
             cv::Point a = contour[anchor.first] - contour[anchor.second];
             cv::Point b = contour[not_adjacent.first] - contour[not_adjacent.second];
-            double cos_ab = cos_between_vectors(a, b);
-            cos_ab = cv::abs(cos_ab);
-            bool cos_is_in_confidence_interval = cos_ab < (1 + delta) && cos_ab > (1 - delta);
-            LOG(DEBUG) << cos_ab;
-            if(cos_is_in_confidence_interval){
+            if(is_vectors_collinear(a, b, delta)){
                 return true;
             }
         }
@@ -389,7 +399,6 @@ int main(int argc, char** argv )
     auto marker_contours = extract_contours(work_marker, false, true);
     auto image_contours = extract_contours(work_image, true, false);
 
-    LOG(DEBUG) << cv::isContourConvex(marker_contours[0]);
     int best_contour_match_index = search_best_contours_match(image_contours, marker_contours[0]);
     if(best_contour_match_index == -1){
         LOG(ERROR) << "Can't find contour matching in image";
